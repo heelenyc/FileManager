@@ -1,6 +1,7 @@
 package com.filemanager.service.node;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.filemanager.dao.mapper.StorageNodeMapper;
 import com.filemanager.model.entity.StorageNode;
 import com.filemanager.service.lock.DistributedLockService;
@@ -49,6 +50,8 @@ public class NodeHealthCheckService {
 
     /**
      * 更新自己的心跳（每10秒）
+     * 注意：心跳只更新 lastHeartbeat 字段，不修改 status 状态
+     * 状态修改应该只在注册、停止、手动隔离/恢复、全局健康检测时发生
      */
     @Scheduled(fixedRateString = "${node.heartbeat-interval:10}000")
     public void updateOwnHeartbeat() {
@@ -58,18 +61,41 @@ public class NodeHealthCheckService {
             return;
         }
 
-        // 隔离节点不更新心跳
-        if (currentNode.getStatus() == 2) {
-            log.info("当前节点已隔离(status=2)，跳过心跳更新: nodeName={}", currentNode.getNodeName());
+        // 1. 从数据库查询最新状态
+        StorageNode dbNode = storageNodeMapper.selectById(currentNode.getId());
+        if (dbNode == null) {
+            log.warn("数据库中找不到节点，跳过心跳更新: nodeName={}", currentNode.getNodeName());
             return;
         }
 
+        // 2. 如果数据库状态是隔离，跳过心跳更新，同步 currentNode 后返回
+        if (dbNode.getStatus() == 2) {
+            log.info("节点已隔离，跳过心跳更新: nodeName={}", dbNode.getNodeName());
+            nodeAutoRegisterService.updateCurrentNode(dbNode);  // 同步整个 currentNode
+            return;
+        }
+
+        // 3. 检查 currentNode 和数据库状态是否一致
+        if (currentNode.getStatus() != null && !currentNode.getStatus().equals(dbNode.getStatus())) {
+            log.warn("节点状态不一致，同步 currentNode: nodeName={}, currentNode.status={}, db.status={}",
+                    currentNode.getNodeName(), currentNode.getStatus(), dbNode.getStatus());
+        }
+
         try {
-            currentNode.setLastHeartbeat(LocalDateTime.now());
-            storageNodeMapper.updateById(currentNode);
-            log.info("心跳更新成功: nodeName={}, lastHeartbeat={}", currentNode.getNodeName(), currentNode.getLastHeartbeat());
+            // 4. 只更新 lastHeartbeat 字段（不修改 status）
+            LocalDateTime now = LocalDateTime.now();
+            storageNodeMapper.update(null,
+                new LambdaUpdateWrapper<StorageNode>()
+                    .eq(StorageNode::getId, dbNode.getId())
+                    .set(StorageNode::getLastHeartbeat, now)
+            );
+
+            // 5. 更新 dbNode 的心跳时间，并同步到 currentNode
+            dbNode.setLastHeartbeat(now);
+            nodeAutoRegisterService.updateCurrentNode(dbNode);  // 用最新的 dbNode 替换 currentNode
+            log.info("心跳更新成功: nodeName={}, lastHeartbeat={}", dbNode.getNodeName(), now);
         } catch (Exception e) {
-            log.error("心跳更新失败: nodeName={}", currentNode.getNodeName(), e);
+            log.error("心跳更新失败: nodeName={}", dbNode.getNodeName(), e);
         }
     }
 

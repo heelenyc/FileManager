@@ -193,6 +193,13 @@ public class NodeAutoRegisterService {
     }
 
     /**
+     * 更新当前节点信息（从数据库同步）
+     */
+    public void updateCurrentNode(StorageNode newNode) {
+        this.currentNode = newNode;
+    }
+
+    /**
      * 获取当前节点ID
      */
     public Long getCurrentNodeId() {
