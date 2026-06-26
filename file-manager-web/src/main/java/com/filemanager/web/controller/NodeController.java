@@ -45,10 +45,24 @@ public class NodeController {
     @Operation(summary = "获取所有节点列表")
     @GetMapping("/list")
     @RequirePermission("node:view")
-    public Result<List<StorageNode>> listNodes() {
-        List<StorageNode> nodes = storageNodeMapper.selectList(
-                new LambdaQueryWrapper<StorageNode>().orderByAsc(StorageNode::getId)
-        );
+    public Result<List<StorageNode>> listNodes(
+            @RequestParam(required = false) String nodeName,
+            @RequestParam(required = false) Integer status) {
+
+        LambdaQueryWrapper<StorageNode> wrapper = new LambdaQueryWrapper<StorageNode>()
+                .orderByAsc(StorageNode::getNodeName);  // 按 nodeName 升序
+
+        // 搜索 nodeName（模糊匹配）
+        if (nodeName != null && !nodeName.isEmpty()) {
+            wrapper.like(StorageNode::getNodeName, nodeName);
+        }
+
+        // 筛选 status
+        if (status != null) {
+            wrapper.eq(StorageNode::getStatus, status);
+        }
+
+        List<StorageNode> nodes = storageNodeMapper.selectList(wrapper);
         return Result.success(nodes);
     }
 

@@ -5,7 +5,31 @@
         <div style="display: flex; justify-content: space-between;">
           <span>存储节点监控</span>
           <div>
-            <el-button size="small" @click="loadNodes">刷新</el-button>
+            <!-- 搜索框 -->
+            <el-input
+              v-model="searchNodeName"
+              placeholder="搜索节点名称"
+              clearable
+              style="width: 150px"
+              @clear="loadNodes"
+              @keyup.enter="loadNodes"
+            />
+            <!-- 状态筛选 -->
+            <el-select
+              v-model="searchStatus"
+              placeholder="筛选状态"
+              clearable
+              style="width: 120px; margin-left: 10px"
+              @change="loadNodes"
+            >
+              <el-option label="在线" :value="1" />
+              <el-option label="离线" :value="0" />
+              <el-option label="隔离" :value="2" />
+            </el-select>
+            <!-- 搜索按钮 -->
+            <el-button size="small" type="primary" @click="loadNodes" style="margin-left: 10px">搜索</el-button>
+            <!-- 刷新按钮 -->
+            <el-button size="small" @click="clearSearch">重置</el-button>
           </div>
         </div>
       </template>
@@ -70,19 +94,34 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const nodes = ref([])
 const loading = ref(false)
+const searchNodeName = ref('')
+const searchStatus = ref(null)
 
 onMounted(() => loadNodes())
 
 const loadNodes = async () => {
   loading.value = true
   try {
-    const res = await request.get('/node/list')
+    const params = {}
+    if (searchNodeName.value) {
+      params.nodeName = searchNodeName.value
+    }
+    if (searchStatus.value !== null && searchStatus.value !== undefined) {
+      params.status = searchStatus.value
+    }
+    const res = await request.get('/node/list', { params })
     nodes.value = res.data || []
   } catch (error) {
     ElMessage.error(error.response?.data?.message || '获取节点列表失败')
   } finally {
     loading.value = false
   }
+}
+
+const clearSearch = () => {
+  searchNodeName.value = ''
+  searchStatus.value = null
+  loadNodes()
 }
 
 // 状态类型映射
