@@ -98,46 +98,7 @@ public class DistributedStorageService {
     }
 
     /**
-     * 根据节点ID获取节点信息（检查节点状态）
-     * 优先从哈希环查询，如果不存在则从数据库查询
-     * @param nodeId 节点ID
-     * @return 节点信息（如果节点离线或不存在则返回 null）
-     */
-    public StorageNode getNodeById(Long nodeId) {
-        // 1. 先从哈希环查询（活跃节点）
-        StorageNode hashNode = consistentHash.getNodeById(nodeId);
-        if (hashNode != null) {
-            // 在哈希环中，检查数据库状态
-            StorageNode dbNode = storageNodeMapper.selectById(nodeId);
-            if (dbNode == null || dbNode.getStatus() == null || dbNode.getStatus() != 1) {
-                log.warn("节点在哈希环中但数据库状态离线: nodeId={}, nodeName={}", nodeId, hashNode.getNodeName());
-                return null;
-            }
-            return hashNode;
-        }
-        
-        // 2. 哈希环中没有，从数据库查询（可能是旧节点）
-        StorageNode dbNode = storageNodeMapper.selectById(nodeId);
-        if (dbNode == null) {
-            log.warn("节点不存在: nodeId={}", nodeId);
-            return null;
-        }
-        
-        // 检查节点状态
-        if (dbNode.getStatus() == null || dbNode.getStatus() != 1) {
-            log.warn("节点离线: nodeId={}, nodeName={}, status={}", nodeId, dbNode.getNodeName(), dbNode.getStatus());
-            return null;
-        }
-        
-        log.info("节点不在哈希环中但数据库状态在线，尝试添加: nodeId={}, nodeName={}", nodeId, dbNode.getNodeName());
-        // 节点在线但不在哈希环中，可能是数据不一致，添加到哈希环
-        consistentHash.addNode(dbNode);
-        return dbNode;
-    }
-
-    /**
      * 根据节点名称获取节点信息（检查节点状态）
-     * 用于副本节点查找，因为副本节点记录的是节点名称而非ID
      * @param nodeName 节点名称
      * @return 节点信息（如果节点离线或不存在则返回 null）
      */
@@ -155,14 +116,14 @@ public class DistributedStorageService {
 
         // 2. 检查节点状态
         if (dbNode.getStatus() == null || dbNode.getStatus() != 1) {
-            log.warn("节点离线: nodeId={}, nodeName={}, status={}", dbNode.getId(), nodeName, dbNode.getStatus());
+            log.warn("节点离线: nodeName={}, status={}", nodeName, dbNode.getStatus());
             return null;
         }
 
         // 3. 确保节点在哈希环中
-        StorageNode hashNode = consistentHash.getNodeById(dbNode.getId());
+        StorageNode hashNode = consistentHash.getNodeByName(nodeName);
         if (hashNode == null) {
-            log.info("节点不在哈希环中，尝试添加: nodeId={}, nodeName={}", dbNode.getId(), nodeName);
+            log.info("节点不在哈希环中，尝试添加: nodeName={}", nodeName);
             consistentHash.addNode(dbNode);
         }
 

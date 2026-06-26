@@ -60,17 +60,16 @@ public class NodeHealthCheckService {
 
         // 隔离节点不更新心跳
         if (currentNode.getStatus() == 2) {
-            log.info("当前节点已隔离(status=2)，跳过心跳更新: nodeId={}", currentNode.getId());
+            log.info("当前节点已隔离(status=2)，跳过心跳更新: nodeName={}", currentNode.getNodeName());
             return;
         }
 
         try {
             currentNode.setLastHeartbeat(LocalDateTime.now());
             storageNodeMapper.updateById(currentNode);
-            log.info("心跳更新成功: nodeId={}, nodeName={}, lastHeartbeat={}", 
-                    currentNode.getId(), currentNode.getNodeName(), currentNode.getLastHeartbeat());
+            log.info("心跳更新成功: nodeName={}, lastHeartbeat={}", currentNode.getNodeName(), currentNode.getLastHeartbeat());
         } catch (Exception e) {
-            log.error("心跳更新失败: nodeId={}", currentNode.getId(), e);
+            log.error("心跳更新失败: nodeName={}", currentNode.getNodeName(), e);
         }
     }
 
@@ -155,7 +154,7 @@ public class NodeHealthCheckService {
         for (StorageNode node : dbNodes) {
             // 隔离节点不检测，不加入存活列表
             if (node.getStatus() == 2) {
-                log.info("节点已隔离，跳过检测: nodeId={}, nodeName={}, status=2", node.getId(), node.getNodeName());
+                log.info("节点已隔离，跳过检测: nodeName={}, status=2", node.getNodeName());
                 continue;
             }
 
@@ -203,8 +202,8 @@ public class NodeHealthCheckService {
             node.setStatus(newStatus);
             node.setLastHeartbeat(LocalDateTime.now());
             storageNodeMapper.updateById(node);
-            log.info("节点状态变更: nodeId={}, nodeName={}, oldStatus={}, newStatus={}", 
-                    node.getId(), node.getNodeName(), currentStatus, newStatus == 1 ? "在线" : "离线");
+            log.info("节点状态变更: nodeName={}, oldStatus={}, newStatus={}", 
+                    node.getNodeName(), currentStatus, newStatus == 1 ? "在线" : "离线");
         }
     }
 }

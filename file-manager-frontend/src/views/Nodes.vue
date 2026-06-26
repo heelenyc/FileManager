@@ -48,6 +48,14 @@
               size="small" 
               @click="handleDelete(row)"
             >删除</el-button>
+            <!-- 离线或隔离节点：可以彻底删除 -->
+            <el-button 
+              v-if="row.status !== 1" 
+              type="danger" 
+              size="small" 
+              plain
+              @click="handlePhysicalDelete(row)"
+            >彻底删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -103,7 +111,7 @@ const handleIsolate = async (row) => {
       '隔离节点',
       { type: 'warning' }
     )
-    await request.post(`/node/isolate/${row.id}`)
+    await request.post(`/node/isolate/${row.nodeName}`)
     ElMessage.success('节点已隔离')
     loadNodes()
   } catch (error) {
@@ -121,7 +129,7 @@ const handleRecover = async (row) => {
       '恢复节点',
       { type: 'info' }
     )
-    await request.post(`/node/recover/${row.id}`)
+    await request.post(`/node/recover/${row.nodeName}`)
     ElMessage.success('节点已恢复')
     loadNodes()
   } catch (error) {
@@ -135,16 +143,34 @@ const handleRecover = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(
-      `确认删除节点 "${row.nodeName}"？此操作不可恢复。`,
+      `确认删除节点 "${row.nodeName}"？此操作为逻辑删除，可恢复。`,
       '删除节点',
       { type: 'danger' }
     )
-    await request.delete(`/node/${row.id}`)
+    await request.delete(`/node/${row.nodeName}`)
     ElMessage.success('节点已删除')
     loadNodes()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.message || '删除失败')
+    }
+  }
+}
+
+// 彻底删除节点（物理删除）
+const handlePhysicalDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认彻底删除节点 "${row.nodeName}"？此操作将物理删除记录，不可恢复！`,
+      '彻底删除节点',
+      { type: 'danger', confirmButtonText: '彻底删除', cancelButtonText: '取消' }
+    )
+    await request.delete(`/node/physical/${row.nodeName}`)
+    ElMessage.success('节点已彻底删除')
+    loadNodes()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.message || '彻底删除失败')
     }
   }
 }

@@ -5,6 +5,7 @@ import com.filemanager.common.annotation.OperationLog;
 import com.filemanager.common.annotation.RequirePermission;
 import com.filemanager.common.exception.BusinessException;
 import com.filemanager.common.result.Result;
+import com.filemanager.common.result.ResultCode;
 import com.filemanager.dao.mapper.StorageNodeMapper;
 import com.filemanager.model.entity.StorageNode;
 import com.filemanager.service.node.ConsistentHash;
@@ -59,11 +60,14 @@ public class NodeController {
     }
 
     @Operation(summary = "隔离节点（强制下线）")
-    @PostMapping("/isolate/{nodeId}")
+    @PostMapping("/isolate/{nodeName}")
     @RequirePermission("node:manage")
     @OperationLog("隔离节点")
-    public Result<Void> isolateNode(@PathVariable Long nodeId) {
-        StorageNode node = storageNodeMapper.selectById(nodeId);
+    public Result<Void> isolateNode(@PathVariable String nodeName) {
+        StorageNode node = storageNodeMapper.selectOne(
+                new LambdaQueryWrapper<StorageNode>()
+                        .eq(StorageNode::getNodeName, nodeName)
+        );
         if (node == null) {
             throw new BusinessException(404, "节点不存在");
         }
@@ -77,18 +81,21 @@ public class NodeController {
         storageNodeMapper.updateById(node);
 
         // 从哈希环移除
-        consistentHash.removeNode(nodeId);
+        consistentHash.removeNode(nodeName);
 
-        log.info("节点隔离成功: nodeId={}, nodeName={}", nodeId, node.getNodeName());
+        log.info("节点隔离成功: nodeName={}", nodeName);
         return Result.success();
     }
 
     @Operation(summary = "恢复节点（取消隔离）")
-    @PostMapping("/recover/{nodeId}")
+    @PostMapping("/recover/{nodeName}")
     @RequirePermission("node:manage")
     @OperationLog("恢复节点")
-    public Result<Void> recoverNode(@PathVariable Long nodeId) {
-        StorageNode node = storageNodeMapper.selectById(nodeId);
+    public Result<Void> recoverNode(@PathVariable String nodeName) {
+        StorageNode node = storageNodeMapper.selectOne(
+                new LambdaQueryWrapper<StorageNode>()
+                        .eq(StorageNode::getNodeName, nodeName)
+        );
         if (node == null) {
             throw new BusinessException(404, "节点不存在");
         }
@@ -104,16 +111,19 @@ public class NodeController {
         // 添加到哈希环
         consistentHash.addNode(node);
 
-        log.info("节点恢复成功: nodeId={}, nodeName={}", nodeId, node.getNodeName());
+        log.info("节点恢复成功: nodeName={}", nodeName);
         return Result.success();
     }
 
     @Operation(summary = "删除节点记录")
-    @DeleteMapping("/{nodeId}")
+    @DeleteMapping("/{nodeName}")
     @RequirePermission("node:manage")
     @OperationLog("删除节点")
-    public Result<Void> deleteNode(@PathVariable Long nodeId) {
-        StorageNode node = storageNodeMapper.selectById(nodeId);
+    public Result<Void> deleteNode(@PathVariable String nodeName) {
+        StorageNode node = storageNodeMapper.selectOne(
+                new LambdaQueryWrapper<StorageNode>()
+                        .eq(StorageNode::getNodeName, nodeName)
+        );
         if (node == null) {
             throw new BusinessException(404, "节点不存在");
         }
@@ -123,10 +133,31 @@ public class NodeController {
             throw new BusinessException(400, "在线节点不能删除，请先隔离");
         }
 
-        storageNodeMapper.deleteById(nodeId);
-        consistentHash.removeNode(nodeId);
+        storageNodeMapper.deleteById(node.getId());
+        consistentHash.removeNode(nodeName);
 
-        log.info("节点记录删除成功: nodeId={}, nodeName={}", nodeId, node.getNodeName());
+        log.info("节点记录删除成功: nodeName={}", nodeName);
+        return Result.success();
+    }
+
+    @Operation(summary = "彻底删除节点（物理删除）")
+    @DeleteMapping("/physical/{nodeName}")
+    @RequirePermission("node:manage")
+    @OperationLog("彻底删除节点")
+    public Result<Void> physicalDeleteNode(@PathVariable String nodeName) {
+        StorageNode node = storageNodeMapper.selectOne(
+                new LambdaQueryWrapper<StorageNode>()
+                        .eq(StorageNode::getNodeName, nodeName)
+        );
+        if (node == null) {
+            throw new BusinessException(ResultCode.NODE_NOT_AVAILABLE);
+        }
+
+        // 物理删除
+        storageNodeMapper.physicalDeleteById(node.getId());
+        consistentHash.removeNode(nodeName);
+
+        log.info("节点彻底删除成功: nodeName={}", nodeName);
         return Result.success();
     }
 

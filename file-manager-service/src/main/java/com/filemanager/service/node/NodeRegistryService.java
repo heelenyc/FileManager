@@ -38,13 +38,6 @@ public class NodeRegistryService {
     }
 
     /**
-     * 根据节点ID获取节点信息
-     */
-    public StorageNode getNodeById(Long nodeId) {
-        return storageNodeMapper.selectById(nodeId);
-    }
-
-    /**
      * 根据节点名称获取节点信息
      */
     public StorageNode getNodeByName(String nodeName) {

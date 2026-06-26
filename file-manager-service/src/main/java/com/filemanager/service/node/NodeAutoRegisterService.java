@@ -48,9 +48,9 @@ public class NodeAutoRegisterService {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void autoRegister() {
-        log.info("========================================");
-        log.info("节点自动注册开始: name={}, host={}, port={}", nodeName, nodeHost, nodePort);
-        log.info("========================================");
+     log.info("=========================================");
+            log.info("节点自动注册开始: nodeName={}, host={}, port={}", nodeName, nodeHost, nodePort);
+            log.info("=========================================");
 
         try {
             // 1. 确保父路径存在
@@ -72,15 +72,15 @@ public class NodeAutoRegisterService {
 
             // 4. 同步到 MySQL
             currentNode = syncNodeToDb();
-            log.info("MySQL节点记录同步成功: nodeId={}, status=在线", currentNode.getId());
+            log.info("MySQL节点记录同步成功: nodeName={}, status=在线", nodeName);
 
             // 5. 添加到一致性哈希环
             consistentHash.addNode(currentNode);
-            log.info("一致性哈希环添加节点成功: nodeId={}, 虚拟节点数=150", currentNode.getId());
+            log.info("一致性哈希环添加节点成功: nodeName={}, 虚拟节点数=150", nodeName);
 
             registered = true;
             log.info("========================================");
-            log.info("节点自动注册完成: nodeName={}, nodeId={}", nodeName, currentNode.getId());
+            log.info("节点自动注册完成: nodeName={}", nodeName);
             log.info("========================================");
 
         } catch (Exception e) {
@@ -106,7 +106,7 @@ public class NodeAutoRegisterService {
                 currentNode.setStatus(0);
                 currentNode.setLastHeartbeat(LocalDateTime.now());
                 storageNodeMapper.updateById(currentNode);
-                log.info("MySQL节点状态更新为离线: nodeId={}", currentNode.getId());
+                log.info("MySQL节点状态更新为离线: nodeName={}", nodeName);
             }
             
             log.info("节点清理完成: nodeName={}", nodeName);
@@ -127,8 +127,32 @@ public class NodeAutoRegisterService {
 
     /**
      * 同步节点到数据库
+     * 方案1：恢复逻辑删除的记录（name + host + port 匹配）
      */
     private StorageNode syncNodeToDb() {
+        // 1. 查询逻辑删除的同名节点（绕过MyBatis-Plus逻辑删除机制）
+        StorageNode deletedNode = storageNodeMapper.selectDeletedByName(nodeName);
+
+        if (deletedNode != null) {
+            // 2. 检查 host + port 是否匹配
+            if (deletedNode.getNodeHost().equals(nodeHost) && deletedNode.getNodePort().equals(nodePort)) {
+                // 匹配：恢复逻辑删除的记录
+                deletedNode.setStatus(1);  // 在线
+                deletedNode.setLastHeartbeat(LocalDateTime.now());
+                deletedNode.setZkPath(NODES_PATH + "/" + nodeName);
+                storageNodeMapper.restoreById(deletedNode.getId());
+                storageNodeMapper.updateById(deletedNode);
+                log.info("恢复逻辑删除的节点记录: nodeName={}", nodeName);
+                return deletedNode;
+            } else {
+                // 不匹配：报错
+                log.error("节点地址已变更: nodeName={}, oldHost={}, oldPort={}, newHost={}, newPort={}",
+                        nodeName, deletedNode.getNodeHost(), deletedNode.getNodePort(), nodeHost, nodePort);
+                throw new RuntimeException("节点名称已存在但地址已变更，请使用新名称或先彻底删除旧节点");
+            }
+        }
+
+        // 3. 查询正常记录（deleted='0'）
         StorageNode existing = storageNodeMapper.selectOne(
                 new LambdaQueryWrapper<StorageNode>()
                         .eq(StorageNode::getNodeName, nodeName)
@@ -142,7 +166,7 @@ public class NodeAutoRegisterService {
             existing.setLastHeartbeat(LocalDateTime.now());
             existing.setZkPath(NODES_PATH + "/" + nodeName);
             storageNodeMapper.updateById(existing);
-            log.info("更新已有节点记录: nodeId={}, nodeName={}", existing.getId(), nodeName);
+            log.info("更新已有节点记录: nodeName={}", nodeName);
             return existing;
         } else {
             // 创建新记录
@@ -156,7 +180,7 @@ public class NodeAutoRegisterService {
             node.setZkPath(NODES_PATH + "/" + nodeName);
             node.setLastHeartbeat(LocalDateTime.now());
             storageNodeMapper.insert(node);
-            log.info("创建新节点记录: nodeId={}, nodeName={}", node.getId(), nodeName);
+            log.info("创建新节点记录: nodeName={}", nodeName);
             return node;
         }
     }
