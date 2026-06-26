@@ -1,0 +1,171 @@
+# =====================================================
+# Java Maven Spring Boot 项目 .gitignore
+# =====================================================
+
+# -----------------------------------------------------
+# Maven 构建输出
+# -----------------------------------------------------
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# -----------------------------------------------------
+# Java 编译输出
+# -----------------------------------------------------
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# -----------------------------------------------------
+# IDE 配置文件
+# -----------------------------------------------------
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.project
+.classpath
+.settings/
+.metadata/
+bin/
+tmp/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# -----------------------------------------------------
+# 日志文件
+# -----------------------------------------------------
+logs/
+*.log
+log/
+app.log
+*.log.*
+
+# -----------------------------------------------------
+# 本地文件存储目录
+# -----------------------------------------------------
+local-storage*/
+
+# -----------------------------------------------------
+# 配置文件（敏感信息）
+# -----------------------------------------------------
+# 保留模板，忽略本地配置
+# application-local.yml
+# application-dev.yml
+
+# -----------------------------------------------------
+# 操作系统临时文件
+# -----------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# -----------------------------------------------------
+# 其他临时文件
+# -----------------------------------------------------
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.cache
+*.pid
+*.seed
+*.pid.lock
+
+# -----------------------------------------------------
+# 打包文件
+# -----------------------------------------------------
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# -----------------------------------------------------
+# 测试覆盖率报告
+# -----------------------------------------------------
+coverage/
+*.lcov
+.nyc_output/
+lib-cov/
+.grunt/
+.lock-wscript/
+.node_repl_history/
+*.tsbuildinfo
+.npm
+.eslintcache
+.stylelintcache
+
+# -----------------------------------------------------
+# 依赖目录（前端）
+# -----------------------------------------------------
+node_modules/
+bower_components/
+vendor/
+jspm_packages/
+
+# -----------------------------------------------------
+# 构建输出（前端）
+# -----------------------------------------------------
+dist/
+build/
+.output/
+.cache/
+.nuxt/
+.next/
+.vuepress/dist/
+.serverless/
+.dynamodb/
+.terraform/
+.docusaurus/
+.serverless_plugins/
+
+# -----------------------------------------------------
+# 环境变量文件
+# -----------------------------------------------------
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local

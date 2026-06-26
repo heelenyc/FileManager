@@ -1,0 +1,111 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: file-manager
+
+  # 数据源配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/file_manager?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+
+  # Redis 配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 3000ms
+
+  # Servlet 配置（文件上传）
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  # Jackson 配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: "1"
+      logic-not-delete-value: "0"
+  configuration:
+    map-underscore-to-camel-case: true
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 控制台输出所有SQL（开发调试用）
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl       # 使用Slf4j，可通过logback控制日志级别
+
+# Redisson 配置
+redisson:
+  address: redis://localhost:6379
+  password: redis123
+  database: 0
+
+# Zookeeper 配置
+curator:
+  connect-string: localhost:2181
+  session-timeout-ms: 30000
+  connection-timeout-ms: 10000
+  base-path: file-manager
+
+# JWT 配置
+jwt:
+  secret: file-manager-jwt-secret-key-2024-must-be-at-least-256-bits-long
+  access-token-expiration: 7200000    # 2小时
+  refresh-token-expiration: 604800000 # 7天
+
+# 节点配置
+node:
+  name: node0                       # 节点名称（唯一标识）
+  host: localhost                   # 节点地址
+  port: ${server.port}              # 节点端口（默认跟随server.port）
+  heartbeat-interval: 10            # 心跳间隔（秒）
+  heartbeat-tolerance: 20           # 心跳容忍时间（秒）
+
+# 文件存储配置
+file:
+  storage:
+    base-path: ./local-storage-8080    # 本地存储根路径
+    chunk-size: 8388608    # 分片大小 8MB（测试用，生产环境建议 64MB=67108864）
+    max-file-size: 5368709120  # 最大文件大小 5GB
+    replica-count: 3        # 默认副本数
+  encryption:
+    master-key: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2  # 主密钥(Hex)，生产环境应从环境变量读取
+  internal:
+    token: file-manager-internal-2024  # 内部节点通信认证token
+
+# Knife4j 配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: default
+      paths-to-match: /**
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
