@@ -45,11 +45,11 @@ public class DistributedStorageService {
     public void store(StorageNode node, String storagePath, byte[] data) {
         if (isCurrentNode(node)) {
             // 本节点，直接存储
-            log.info("本地存储: path={}, size={}", storagePath, data.length);
+            log.debug("本地存储: path={}, size={}", storagePath, data.length);
             localStorageService.store(storagePath, new ByteArrayInputStream(data));
         } else {
             // 远程节点，HTTP调用
-            log.info("远程存储: node={}, path={}, size={}", node.getNodeName(), storagePath, data.length);
+            log.debug("远程存储: node={}, path={}, size={}", node.getNodeName(), storagePath, data.length);
             remoteStorageService.store(node, storagePath, data);
         }
     }
@@ -63,11 +63,11 @@ public class DistributedStorageService {
     public void read(StorageNode node, String storagePath, ByteArrayOutputStream baos) {
         if (isCurrentNode(node)) {
             // 本节点，直接读取
-            log.info("本地读取: path={}", storagePath);
+            log.debug("本地读取: path={}", storagePath);
             localStorageService.read(storagePath, baos);
         } else {
             // 远程节点，HTTP调用
-            log.info("远程读取: node={}, path={}", node.getNodeName(), storagePath);
+            log.debug("远程读取: node={}, path={}", node.getNodeName(), storagePath);
             remoteStorageService.read(node, storagePath, baos);
         }
     }
@@ -80,11 +80,11 @@ public class DistributedStorageService {
     public void delete(StorageNode node, String storagePath) {
         if (isCurrentNode(node)) {
             // 本节点，直接删除
-            log.info("本地删除: path={}", storagePath);
+            log.debug("本地删除: path={}", storagePath);
             localStorageService.delete(storagePath);
         } else {
             // 远程节点，HTTP调用
-            log.info("远程删除: node={}, path={}", node.getNodeName(), storagePath);
+            log.debug("远程删除: node={}, path={}", node.getNodeName(), storagePath);
             remoteStorageService.delete(node, storagePath);
         }
     }
@@ -123,7 +123,7 @@ public class DistributedStorageService {
         // 3. 确保节点在哈希环中
         StorageNode hashNode = consistentHash.getNodeByName(nodeName);
         if (hashNode == null) {
-            log.info("节点不在哈希环中，尝试添加: nodeName={}", nodeName);
+            log.debug("节点不在哈希环中，尝试添加: nodeName={}", nodeName);
             consistentHash.addNode(dbNode);
         }
 

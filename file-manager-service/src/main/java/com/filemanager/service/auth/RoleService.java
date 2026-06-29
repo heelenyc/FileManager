@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.filemanager.dao.mapper.PermissionMapper;
 import com.filemanager.dao.mapper.RoleMapper;
 import com.filemanager.dao.mapper.RolePermissionMapper;
+import com.filemanager.dao.mapper.UserRoleMapper;
 import com.filemanager.model.entity.Permission;
 import com.filemanager.model.entity.Role;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ public class RoleService {
     private final RoleMapper roleMapper;
     private final PermissionMapper permissionMapper;
     private final RolePermissionMapper rolePermissionMapper;
+    private final UserRoleMapper userRoleMapper;
+    private final AuthService authService;
 
     public Page<Role> listRoles(int pageNum, int pageSize, String keyword) {
         LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<Role>()
@@ -79,11 +82,22 @@ public class RoleService {
         if ("ADMIN".equals(role.getRoleCode())) {
             throw new IllegalArgumentException("不允许删除管理员角色");
         }
+
+        // 先查询拥有该角色的用户，清除缓存
+        List<Long> userIds = userRoleMapper.selectUserIdsByRoleId(roleId);
+        for (Long userId : userIds) {
+            authService.clearUserCache(userId);
+        }
+
+        // 删除角色
         role.setDeleted("1");
         roleMapper.updateById(role);
-        // 删除关联的权限
+
+        // 删除关联的权限和用户关联
         rolePermissionMapper.deleteByRoleId(roleId);
-        log.info("删除角色: {}", role.getRoleName());
+        userRoleMapper.deleteByRoleId(roleId);
+
+        log.info("删除角色: {}, 已清除{}个用户缓存", role.getRoleName(), userIds.size());
     }
 
     public List<Permission> getPermissionsByRoleId(Long roleId) {
@@ -102,7 +116,13 @@ public class RoleService {
         for (Long permId : permissionIds) {
             rolePermissionMapper.insert(roleId, permId);
         }
-        log.info("角色[{}]分配了{}个权限", role.getRoleName(), permissionIds.size());
+
+        // 清除所有拥有该角色的用户缓存
+        List<Long> userIds = userRoleMapper.selectUserIdsByRoleId(roleId);
+        for (Long userId : userIds) {
+            authService.clearUserCache(userId);
+        }
+        log.info("角色[{}]分配了{}个权限，已清除{}个用户缓存", role.getRoleName(), permissionIds.size(), userIds.size());
     }
 
     public List<Permission> listAllPermissions() {

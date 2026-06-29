@@ -92,6 +92,11 @@ const handleLogin = async () => {
     const res = await request.post('/auth/login', loginForm.value)
     localStorage.setItem('token', res.data.accessToken)
     localStorage.setItem('refreshToken', res.data.refreshToken)
+
+    // 获取用户信息（包含权限）
+    const userRes = await request.get('/auth/current')
+    localStorage.setItem('userInfo', JSON.stringify(userRes.data))
+
     ElMessage.success('登录成功')
     router.push('/')
   } finally {

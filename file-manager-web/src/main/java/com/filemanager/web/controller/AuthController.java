@@ -2,6 +2,7 @@ package com.filemanager.web.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.filemanager.common.annotation.RequirePermission;
+import com.filemanager.common.constants.CommonConstants;
 import com.filemanager.common.result.Result;
 import com.filemanager.model.dto.LoginRequest;
 import com.filemanager.model.dto.RegisterRequest;
@@ -10,6 +11,7 @@ import com.filemanager.model.vo.UserVO;
 import com.filemanager.service.auth.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -48,6 +50,26 @@ public class AuthController {
     @GetMapping("/current")
     public Result<UserVO> currentUser(@RequestAttribute("userId") Long userId) {
         return Result.success(authService.getCurrentUser(userId));
+    }
+
+    @Operation(summary = "用户登出")
+    @PostMapping("/logout")
+    public Result<Void> logout(@RequestAttribute("userId") Long userId, HttpServletRequest request) {
+        // 从 header 中提取 token
+        String token = extractToken(request);
+        authService.logout(userId, token);
+        return Result.success();
+    }
+
+    /**
+     * 从请求头中提取 token
+     */
+    private String extractToken(HttpServletRequest request) {
+        String header = request.getHeader(CommonConstants.TOKEN_HEADER);
+        if (header != null && header.startsWith(CommonConstants.TOKEN_PREFIX)) {
+            return header.substring(CommonConstants.TOKEN_PREFIX.length());
+        }
+        return null;
     }
 
     // ========== 用户管理（需管理员权限）==========

@@ -34,22 +34,22 @@
         </div>
       </template>
       <el-table :data="nodes" stripe v-loading="loading">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="nodeName" label="节点名称" width="150" />
-        <el-table-column prop="nodeHost" label="主机" width="150" />
-        <el-table-column prop="nodePort" label="端口" width="100" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="nodeName" label="节点名称" width="120" />
+        <el-table-column prop="nodeHost" label="主机" width="130" />
+        <el-table-column prop="nodePort" label="端口" width="80" />
+        <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="availableSpace" label="可用空间" width="150">
+        <el-table-column prop="availableSpace" label="可用空间" width="120">
           <template #default="{ row }">{{ formatSize(row.availableSpace) }}</template>
         </el-table-column>
-        <el-table-column prop="lastHeartbeat" label="最后心跳" width="170" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column prop="lastHeartbeat" label="最后心跳" width="160" />
+        <el-table-column label="操作" width="280" fixed="right" v-if="hasPermission('node:manage')">
           <template #default="{ row }">
             <!-- 在线节点：可以隔离 -->
             <el-button 
@@ -96,8 +96,25 @@ const nodes = ref([])
 const loading = ref(false)
 const searchNodeName = ref('')
 const searchStatus = ref(null)
+const permissions = ref([])
 
-onMounted(() => loadNodes())
+onMounted(async () => {
+  // 从 API 获取最新用户权限（确保数据是最新的）
+  try {
+    const res = await request.get('/auth/current')
+    permissions.value = res.data.permissions || []
+  } catch (error) {
+    // 如果 API 调用失败，从 localStorage 读取
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    permissions.value = userInfo.permissions || []
+  }
+  loadNodes()
+})
+
+// 权限检查函数
+const hasPermission = (perm) => {
+  return permissions.value.includes(perm)
+}
 
 const loadNodes = async () => {
   loading.value = true

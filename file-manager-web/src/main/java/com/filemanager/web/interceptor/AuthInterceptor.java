@@ -6,6 +6,7 @@ import com.filemanager.common.constants.CommonConstants;
 import com.filemanager.common.exception.BusinessException;
 import com.filemanager.common.result.ResultCode;
 import com.filemanager.common.util.JwtUtil;
+import com.filemanager.service.auth.AuthService;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +26,8 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
+
+    private final AuthService authService;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -53,6 +56,12 @@ public class AuthInterceptor implements HandlerInterceptor {
         // 校验 token 类型
         String type = claims.get("type", String.class);
         if (!"access".equals(type)) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+
+        // 检查 token 是否在黑名单中（已退出登录）
+        if (authService.isTokenBlacklisted(token)) {
+            log.warn("Token已失效（在黑名单中）: userId={}", claims.getSubject());
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
 

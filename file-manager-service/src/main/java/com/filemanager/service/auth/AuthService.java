@@ -13,16 +13,23 @@ import com.filemanager.model.entity.User;
 import com.filemanager.model.vo.TokenVO;
 import com.filemanager.model.vo.UserVO;
 import com.filemanager.common.exception.BusinessException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -32,6 +39,8 @@ public class AuthService {
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final RolePermissionMapper rolePermissionMapper;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Value("${jwt.secret}")
@@ -42,6 +51,14 @@ public class AuthService {
 
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
+
+    @Value("${cache.user-info.expire-minutes:5}")
+    private long cacheExpireMinutes;
+
+    // 用户信息缓存 key 前缀
+    private static final String USER_INFO_CACHE_KEY = "user:info:";
+    // Token 黑名单 key 前缀
+    private static final String TOKEN_BLACKLIST_KEY = "token:blacklist:";
 
     public TokenVO login(LoginRequest request) {
         User user = userMapper.selectOne(
@@ -110,11 +127,105 @@ public class AuthService {
     }
 
     public UserVO getCurrentUser(Long userId) {
+        // 1. 先从 Redis 缓存读取
+        String cacheKey = USER_INFO_CACHE_KEY + userId;
+        String cachedData = redisTemplate.opsForValue().get(cacheKey);
+
+        if (cachedData != null) {
+            try {
+                UserVO cachedUser = objectMapper.readValue(cachedData, UserVO.class);
+                log.debug("从缓存获取用户信息: userId={}, username={}", userId, cachedUser.getUsername());
+                return cachedUser;
+            } catch (JsonProcessingException e) {
+                log.warn("缓存数据解析失败，将从数据库查询: userId={}", userId);
+            }
+        }
+
+        // 2. 缓存不存在，从数据库查询
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        return toUserVO(user, userId);
+        UserVO userVO = toUserVO(user, userId);
+
+        // 3. 缓存到 Redis（配置的分钟数过期）
+        try {
+            String userVOJson = objectMapper.writeValueAsString(userVO);
+            redisTemplate.opsForValue().set(cacheKey, userVOJson, cacheExpireMinutes, TimeUnit.MINUTES);
+            log.debug("用户信息已缓存: userId={}, username={}, expireMinutes={}", userId, userVO.getUsername(), cacheExpireMinutes);
+        } catch (JsonProcessingException e) {
+            log.warn("用户信息缓存失败: userId={}", userId);
+        }
+
+        return userVO;
+    }
+
+    /**
+     * 用户登出（清除缓存 + Token 加入黑名单）
+     */
+    public void logout(Long userId, String token) {
+        // 1. 清除用户信息缓存
+        clearUserCache(userId);
+
+        // 2. 将 Token 加入黑名单
+        addToTokenBlacklist(token);
+
+        log.info("用户登出，缓存已清除，Token已加入黑名单: userId={}", userId);
+    }
+
+    /**
+     * 将 Token 加入黑名单
+     */
+    public void addToTokenBlacklist(String token) {
+        try {
+            String tokenHash = hashToken(token);
+            String blacklistKey = TOKEN_BLACKLIST_KEY + tokenHash;
+
+            // 计算 Token 的剩余有效时间
+            Claims claims = JwtUtil.parseToken(jwtSecret, token);
+            long expirationTime = claims.getExpiration().getTime();
+            long currentTime = System.currentTimeMillis();
+            long remainingTime = expirationTime - currentTime;
+
+            if (remainingTime > 0) {
+                // 将 Token 加入黑名单，过期时间为剩余有效时间
+                redisTemplate.opsForValue().set(blacklistKey, "1", remainingTime, TimeUnit.MILLISECONDS);
+                log.debug("Token已加入黑名单: hash={}, remainingTime={}ms", tokenHash, remainingTime);
+            } else {
+                log.debug("Token已过期，无需加入黑名单: hash={}", tokenHash);
+            }
+        } catch (Exception e) {
+            log.warn("Token加入黑名单失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 检查 Token 是否在黑名单中
+     */
+    public boolean isTokenBlacklisted(String token) {
+        try {
+            String tokenHash = hashToken(token);
+            String blacklistKey = TOKEN_BLACKLIST_KEY + tokenHash;
+            return Boolean.TRUE.equals(redisTemplate.hasKey(blacklistKey));
+        } catch (Exception e) {
+            log.warn("检查Token黑名单失败: {}", e.getMessage());
+            return false;  // 查询失败时默认不在黑名单，避免影响正常用户
+        }
+    }
+
+    /**
+     * 计算 Token 的 hash 值（用于黑名单 key）
+     */
+    private String hashToken(String token) throws NoSuchAlgorithmException {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 
     public Page<UserVO> listUsers(int pageNum, int pageSize, String keyword) {
@@ -197,7 +308,9 @@ public class AuthService {
         }
         user.setDeleted("1");
         userMapper.updateById(user);
-        log.info("删除用户: username={}", user.getUsername());
+        // 清除用户缓存
+        clearUserCache(userId);
+        log.info("删除用户: username={}, 缓存已清除", user.getUsername());
     }
 
     public void changePassword(Long userId, String oldPassword, String newPassword) {
@@ -227,7 +340,9 @@ public class AuthService {
         int newStatus = user.getStatus() == 1 ? 0 : 1;
         user.setStatus(newStatus);
         userMapper.updateById(user);
-        log.info("{}用户: username={}", newStatus == 1 ? "启用" : "禁用", user.getUsername());
+        // 清除用户缓存（状态变更）
+        clearUserCache(userId);
+        log.info("{}用户: username={}, 缓存已清除", newStatus == 1 ? "启用" : "禁用", user.getUsername());
         return newStatus == 1 ? "ENABLED" : "DISABLED";
     }
 
@@ -252,7 +367,20 @@ public class AuthService {
         for (Long roleId : roleIds) {
             userRoleMapper.insert(userId, roleId);
         }
-        log.info("用户[{}]重新分配了{}个角色", user.getUsername(), roleIds.size());
+        // 清除用户缓存（角色变更后权限也会变更）
+        clearUserCache(userId);
+        log.info("用户[{}]重新分配了{}个角色，缓存已清除", user.getUsername(), roleIds.size());
+    }
+
+    /**
+     * 清除用户信息缓存（角色/权限变更时调用）
+     */
+    public void clearUserCache(Long userId) {
+        String cacheKey = USER_INFO_CACHE_KEY + userId;
+        Boolean deleted = redisTemplate.delete(cacheKey);
+        if (Boolean.TRUE.equals(deleted)) {
+            log.debug("用户缓存已清除: userId={}", userId);
+        }
     }
 
     private UserVO toUserVO(User user, Long userId) {

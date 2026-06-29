@@ -101,12 +101,21 @@ public class NodeAutoRegisterService {
         try {
             // Zookeeper 临时节点会自动删除，无需手动处理
             
-            // 更新 MySQL 状态为离线
+            // 更新 MySQL 状态
+            // 注意：如果节点是隔离状态，保持隔离状态（隔离是人为控制，不应该在 stop 时改变）
             if (currentNode != null) {
-                currentNode.setStatus(0);
-                currentNode.setLastHeartbeat(LocalDateTime.now());
-                storageNodeMapper.updateById(currentNode);
-                log.info("MySQL节点状态更新为离线: nodeName={}", nodeName);
+                if (currentNode.getStatus() == 2) {
+                    // 隔离状态保持不变
+                    currentNode.setLastHeartbeat(LocalDateTime.now());
+                    storageNodeMapper.updateById(currentNode);
+                    log.info("节点已隔离，停止时保持隔离状态: nodeName={}, status=2", nodeName);
+                } else {
+                    // 非隔离状态设置为离线
+                    currentNode.setStatus(0);
+                    currentNode.setLastHeartbeat(LocalDateTime.now());
+                    storageNodeMapper.updateById(currentNode);
+                    log.info("MySQL节点状态更新为离线: nodeName={}", nodeName);
+                }
             }
             
             log.info("节点清理完成: nodeName={}", nodeName);
@@ -137,9 +146,19 @@ public class NodeAutoRegisterService {
             // 2. 检查 host + port 是否匹配
             if (deletedNode.getNodeHost().equals(nodeHost) && deletedNode.getNodePort().equals(nodePort)) {
                 // 匹配：恢复逻辑删除的记录
-                deletedNode.setStatus(1);  // 在线
                 deletedNode.setLastHeartbeat(LocalDateTime.now());
                 deletedNode.setZkPath(NODES_PATH + "/" + nodeName);
+                
+                // 注意：如果节点之前是隔离状态，保持隔离状态（隔离是人为控制，不应该在 start 时改变）
+                if (deletedNode.getStatus() == 2) {
+                    // 隔离状态保持不变
+                    log.info("节点已隔离，启动时保持隔离状态（恢复逻辑删除记录）: nodeName={}, status=2", nodeName);
+                } else {
+                    // 非隔离状态设置为在线
+                    deletedNode.setStatus(1);  // 在线
+                    log.info("节点启动，状态设置为在线（恢复逻辑删除记录）: nodeName={}, status=1", nodeName);
+                }
+                
                 storageNodeMapper.restoreById(deletedNode.getId());
                 storageNodeMapper.updateById(deletedNode);
                 log.info("恢复逻辑删除的节点记录: nodeName={}", nodeName);
@@ -162,9 +181,19 @@ public class NodeAutoRegisterService {
             // 更新现有记录
             existing.setNodeHost(nodeHost);
             existing.setNodePort(nodePort);
-            existing.setStatus(1);  // 在线
             existing.setLastHeartbeat(LocalDateTime.now());
             existing.setZkPath(NODES_PATH + "/" + nodeName);
+            
+            // 注意：如果节点之前是隔离状态，保持隔离状态（隔离是人为控制，不应该在 start 时改变）
+            if (existing.getStatus() == 2) {
+                // 隔离状态保持不变
+                log.info("节点已隔离，启动时保持隔离状态: nodeName={}, status=2", nodeName);
+            } else {
+                // 非隔离状态设置为在线
+                existing.setStatus(1);  // 在线
+                log.info("节点启动，状态设置为在线: nodeName={}, status=1", nodeName);
+            }
+            
             storageNodeMapper.updateById(existing);
             log.info("更新已有节点记录: nodeName={}", nodeName);
             return existing;

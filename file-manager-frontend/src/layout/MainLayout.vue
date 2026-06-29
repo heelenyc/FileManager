@@ -1,11 +1,13 @@
 <template>
   <el-container style="min-height: 100vh;">
-    <el-aside width="220px" style="background: #304156;">
-      <div style="padding: 20px; text-align: center; color: #fff; font-size: 16px; font-weight: bold;">
-        文件管理系统
+    <el-aside :width="isCollapse ? '64px' : '220px'" style="background: #304156; transition: width 0.3s;">
+      <div style="padding: 16px; text-align: center; color: #fff; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <img src="/logo.png" alt="logo" style="width: 32px; height: 32px; object-fit: contain;" />
+        <span v-show="!isCollapse" style="font-size: 16px; font-weight: bold;">文件管理系统</span>
       </div>
       <el-menu
         :default-active="$route.path"
+        :collapse="isCollapse"
         background-color="#304156"
         text-color="#bfcbd9"
         active-text-color="#409eff"
@@ -44,7 +46,18 @@
       </el-menu>
     </el-aside>
     <el-container>
-      <el-header style="display: flex; align-items: center; justify-content: flex-end; border-bottom: 1px solid #e6e6e6;">
+      <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e6e6e6;">
+        <!-- 菜单收起按钮 -->
+        <div 
+          style="display: flex; align-items: center; cursor: pointer; color: #333; padding: 8px 16px;" 
+          @click="isCollapse = !isCollapse"
+        >
+          <el-icon :size="18">
+            <Expand v-if="isCollapse" />
+            <Fold v-else />
+          </el-icon>
+          <span style="margin-left: 6px; font-size: 14px;">{{ isCollapse ? '展开' : '收起' }}</span>
+        </div>
         <el-dropdown trigger="click" @command="handleCommand">
           <span style="cursor: pointer; display: flex; align-items: center; color: #333;">
             <el-avatar :size="32" style="margin-right: 8px; background-color: #409eff;">
@@ -112,6 +125,7 @@ import request from '../utils/request'
 const router = useRouter()
 const currentUser = ref(null)
 const permissions = ref([])
+const isCollapse = ref(false)
 
 // 修改密码相关
 const pwdDialogVisible = ref(false)
@@ -192,7 +206,15 @@ const handleChangePassword = async () => {
   }
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    // 调用后端登出接口（清除 Redis 缓存）
+    await request.post('/auth/logout')
+  } catch (e) {
+    // 登出接口失败不影响前端登出流程
+    console.warn('登出接口调用失败:', e)
+  }
+  // 清除本地存储
   localStorage.removeItem('token')
   localStorage.removeItem('refreshToken')
   localStorage.removeItem('userInfo')

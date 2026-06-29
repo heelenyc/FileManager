@@ -27,7 +27,7 @@ public class ConsistentHash {
             long hash = hash(node.getNodeName() + "-VN" + i);
             hashRing.put(hash, node.getNodeName());
         }
-        log.info("一致性哈希: 添加节点 nodeName={}, 虚拟节点数={}", node.getNodeName(), VIRTUAL_NODE_COUNT);
+        log.debug("一致性哈希: 添加节点 nodeName={}, 虚拟节点数={}", node.getNodeName(), VIRTUAL_NODE_COUNT);
     }
 
     /**
@@ -39,7 +39,7 @@ public class ConsistentHash {
             long hash = hash(nodeName + "-VN" + i);
             hashRing.remove(hash);
         }
-        log.info("一致性哈希: 移除节点 nodeName={}", nodeName);
+        log.debug("一致性哈希: 移除节点 nodeName={}", nodeName);
     }
 
     /**
@@ -96,7 +96,7 @@ public class ConsistentHash {
         for (StorageNode node : nodes) {
             addNode(node);
         }
-        log.info("一致性哈希环已重建, 节点数={}", nodes.size());
+        log.debug("一致性哈希环已重建, 节点数={}", nodes.size());
     }
 
     /**

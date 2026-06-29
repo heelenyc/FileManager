@@ -160,7 +160,7 @@ public class FileService {
                 distributedStorageService.store(replicaNode, replicaPath, encryptedData);
             }
 
-            log.info("分片上传成功: fileKey={}, chunkIndex={}/{}", fileKey, i, chunkCount);
+            log.debug("分片上传成功: fileKey={}, chunkIndex={}/{}", fileKey, i, chunkCount);
         }
 
         // 3. 返回结果
@@ -270,7 +270,7 @@ public class FileService {
             // 更新 Redis 中的已上传分片数
             redisTemplate.opsForHash().increment(redisKey, "uploadedChunks", 1);
 
-            log.info("分片上传成功: fileKey={}, chunkIndex={}/{}", fileKey, chunkIndex, totalChunks);
+            log.debug("分片上传成功: fileKey={}, chunkIndex={}/{}", fileKey, chunkIndex, totalChunks);
         } catch (IOException e) {
             log.error("分片上传失败: fileKey={}, chunkIndex={}", fileKey, chunkIndex, e);
             throw new BusinessException(ResultCode.FILE_UPLOAD_FAILED);
@@ -330,7 +330,7 @@ public class FileService {
         // 清除 Redis 缓存
         redisTemplate.delete(redisKey);
 
-        log.info("分片上传完成: fileKey={}, chunkCount={}", fileKey, chunkCount);
+        log.debug("分片上传完成: fileKey={}, chunkCount={}", fileKey, chunkCount);
         return toFileVO(metadata);
     }
 
@@ -393,7 +393,7 @@ public class FileService {
             }
         }
 
-        log.info("分片可用节点: chunkIndex={}, primaryNode={}, replicaNodes={}",
+        log.debug("分片可用节点: chunkIndex={}, primaryNode={}, replicaNodes={}",
                 chunk.getChunkIndex(),
                 primaryNode != null ? primaryNode.getNodeName() : "null",
                 nodes.stream().skip(1).map(StorageNode::getNodeName).collect(Collectors.toList()));
@@ -437,7 +437,7 @@ public class FileService {
             try {
                 ByteArrayOutputStream chunkBaos = new ByteArrayOutputStream();
                 distributedStorageService.read(node, storagePath, chunkBaos);
-                log.info("分片读取成功: chunkIndex={}, node={}, path={}, isPrimary={}",
+                log.debug("分片读取成功: chunkIndex={}, node={}, path={}, isPrimary={}",
                         chunkIndex, node.getNodeName(), storagePath, isPrimaryNode);
                 return chunkBaos.toByteArray();
             } catch (Exception e) {

@@ -24,7 +24,7 @@
       <el-table-column prop="contentType" label="类型" width="150" />
       <el-table-column prop="uploadUsername" label="上传者" width="100" />
       <el-table-column prop="createdAt" label="上传时间" width="170" />
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right" v-if="hasPermission('file:recycle')">
         <template #default="{ row }">
           <el-button type="success" size="small" @click="handleRestore(row)">恢复</el-button>
           <el-button type="danger" size="small" @click="handlePurge(row)">彻底删除</el-button>
@@ -56,10 +56,24 @@ const keyword = ref('')
 const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const permissions = ref([])
 
-onMounted(() => {
+onMounted(async () => {
+  // 获取用户权限
+  try {
+    const res = await request.get('/auth/current')
+    permissions.value = res.data.permissions || []
+  } catch (error) {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    permissions.value = userInfo.permissions || []
+  }
   loadRecycled()
 })
+
+// 权限检查函数
+const hasPermission = (perm) => {
+  return permissions.value.includes(perm)
+}
 
 const loadRecycled = async () => {
   loading.value = true

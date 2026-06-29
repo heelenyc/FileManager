@@ -23,8 +23,14 @@ public interface UserRoleMapper {
     @Select("SELECT role_id FROM sys_user_role WHERE user_id = #{userId}")
     List<Long> selectRoleIdsByUserId(@Param("userId") Long userId);
 
+    @Select("SELECT user_id FROM sys_user_role WHERE role_id = #{roleId}")
+    List<Long> selectUserIdsByRoleId(@Param("roleId") Long roleId);
+
     @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")
     void deleteByUserId(@Param("userId") Long userId);
+
+    @Delete("DELETE FROM sys_user_role WHERE role_id = #{roleId}")
+    void deleteByRoleId(@Param("roleId") Long roleId);
 
     @Insert("INSERT INTO sys_user_role (user_id, role_id, created_at) VALUES (#{userId}, #{roleId}, NOW())")
     void insert(@Param("userId") Long userId, @Param("roleId") Long roleId);

@@ -46,7 +46,7 @@ public class RemoteStorageService {
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 Result result = response.getBody();
                 if (result.getCode() == 200) {
-                    log.info("远程存储成功: node={}, path={}, size={}", node.getNodeName(), storagePath, data.length);
+                    log.debug("远程存储成功: node={}, path={}, size={}", node.getNodeName(), storagePath, data.length);
                     return;
                 }
                 throw new BusinessException(500, "远程存储失败: " + result.getMessage());
@@ -76,7 +76,7 @@ public class RemoteStorageService {
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 byte[] data = response.getBody();
                 baos.write(data, 0, data.length);
-                log.info("远程读取成功: node={}, path={}, size={}", node.getNodeName(), storagePath, data.length);
+                log.debug("远程读取成功: node={}, path={}, size={}", node.getNodeName(), storagePath, data.length);
                 return;
             }
             throw new BusinessException(500, "远程读取失败: HTTP " + response.getStatusCode());
@@ -102,7 +102,7 @@ public class RemoteStorageService {
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 Result result = response.getBody();
                 if (result.getCode() == 200) {
-                    log.info("远程删除成功: node={}, path={}", node.getNodeName(), storagePath);
+                    log.debug("远程删除成功: node={}, path={}", node.getNodeName(), storagePath);
                     return;
                 }
                 throw new BusinessException(500, "远程删除失败: " + result.getMessage());

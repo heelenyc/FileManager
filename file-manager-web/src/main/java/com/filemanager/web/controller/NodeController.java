@@ -15,6 +15,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.curator.framework.CuratorFramework;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -31,6 +33,10 @@ public class NodeController {
     private final NodeRegistryService nodeRegistryService;
     private final StorageNodeMapper storageNodeMapper;
     private final ConsistentHash consistentHash;
+    private final CuratorFramework curatorFramework;
+
+    @Value("${node.heartbeat-tolerance:20}")
+    private int heartbeatTolerance;
 
     @Operation(summary = "获取当前节点信息")
     @GetMapping("/current")
@@ -117,9 +123,21 @@ public class NodeController {
             throw new BusinessException(400, "节点未处于隔离状态");
         }
 
-        // 恢复为在线状态（前提是节点实际在线）
+        // 检查节点实际状态（双重判断：Zookeeper + 心跳）
+        // 注意：隔离节点仍然更新心跳，所以心跳时间检查可用
+        boolean zkAlive = checkZookeeperNode(nodeName);
+        boolean heartbeatAlive = checkHeartbeatAlive(node);
+        boolean isActuallyOnline = zkAlive && heartbeatAlive;
+
+        if (!isActuallyOnline) {
+            String reason = zkAlive ? "心跳超时" : (heartbeatAlive ? "Zookeeper临时节点不存在" : "Zookeeper临时节点不存在且心跳超时");
+            log.warn("节点恢复失败: nodeName={}, 实际状态离线, 原因: {}", nodeName, reason);
+            throw new BusinessException(400, "节点实际离线，无法恢复。原因：" + reason);
+        }
+
+        // 恢复为在线状态
         node.setStatus(1);
-        node.setLastHeartbeat(LocalDateTime.now());
+        node.setLastHeartbeat(LocalDateTime.now());  // 重置心跳时间
         storageNodeMapper.updateById(node);
 
         // 添加到哈希环
@@ -127,6 +145,30 @@ public class NodeController {
 
         log.info("节点恢复成功: nodeName={}", nodeName);
         return Result.success();
+    }
+
+    /**
+     * 检查 Zookeeper 中是否存在节点临时节点
+     */
+    private boolean checkZookeeperNode(String nodeName) {
+        try {
+            String path = "/nodes/" + nodeName;
+            return curatorFramework.checkExists().forPath(path) != null;
+        } catch (Exception e) {
+            log.warn("检查Zookeeper节点失败: nodeName={}, error={}", nodeName, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 检查心跳时间是否在容忍范围内
+     */
+    private boolean checkHeartbeatAlive(StorageNode node) {
+        if (node.getLastHeartbeat() == null) {
+            return false;
+        }
+        LocalDateTime deadline = node.getLastHeartbeat().plusSeconds(heartbeatTolerance);
+        return deadline.isAfter(LocalDateTime.now());
     }
 
     @Operation(summary = "删除节点记录")

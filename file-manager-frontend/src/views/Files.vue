@@ -4,6 +4,7 @@
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
       <div style="display: flex; align-items: center;">
         <el-upload
+          v-if="hasPermission('file:upload')"
           :show-file-list="false"
           :before-upload="beforeUpload"
           :http-request="handleUpload"
@@ -36,8 +37,8 @@
       <el-table-column prop="createdAt" label="上传时间" width="170" />
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" size="small" @click="handleDownload(row)">下载</el-button>
-          <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="hasPermission('file:download')" type="primary" size="small" @click="handleDownload(row)">下载</el-button>
+          <el-button v-if="hasPermission('file:delete')" type="danger" size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -77,6 +78,7 @@ const keyword = ref('')
 const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const permissions = ref([])
 
 // 上传相关
 const showChunkUpload = ref(false)
@@ -86,6 +88,16 @@ const chunkProgress = ref({ uploaded: 0, total: 0 })
 const chunkSize = ref(64 * 1024 * 1024)
 
 onMounted(async () => {
+  // 获取用户权限
+  try {
+    const res = await request.get('/auth/current')
+    permissions.value = res.data.permissions || []
+  } catch (error) {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    permissions.value = userInfo.permissions || []
+  }
+
+  // 获取配置
   try {
     const res = await request.get('/config')
     if (res?.data?.chunkSize) {
@@ -94,6 +106,11 @@ onMounted(async () => {
   } catch (e) {}
   loadFiles()
 })
+
+// 权限检查函数
+const hasPermission = (perm) => {
+  return permissions.value.includes(perm)
+}
 
 const loadFiles = async () => {
   loading.value = true

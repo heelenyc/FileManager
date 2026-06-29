@@ -4,26 +4,22 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.filemanager.dao.mapper.StorageNodeMapper;
 import com.filemanager.model.entity.StorageNode;
-import com.filemanager.service.lock.DistributedLockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
  * 节点健康检测服务
  * 1. 自己的心跳更新（每10秒）
- * 2. 全局存活检测（分布式锁，每10秒）
+ * 2. 全局存活检测（每10秒，每个节点独立重建哈希环）
  */
 @Slf4j
 @Service
@@ -31,15 +27,15 @@ import java.util.stream.Collectors;
 public class NodeHealthCheckService {
 
     private static final String NODES_PATH = "/nodes";
-    private static final String HEALTH_CHECK_LOCK = "health-check";
-    private static final String LAST_CHECK_TIME_KEY = "file-manager:health-check:last-time";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+    // 节点状态常量
+    private static final int STATUS_OFFLINE = 0;   // 离线
+    private static final int STATUS_ONLINE = 1;    // 在线
+    private static final int STATUS_ISOLATED = 2;  // 隔离
 
     private final NodeAutoRegisterService nodeAutoRegisterService;
     private final StorageNodeMapper storageNodeMapper;
     private final CuratorFramework curatorFramework;
-    private final DistributedLockService distributedLockService;
-    private final StringRedisTemplate redisTemplate;
     private final ConsistentHash consistentHash;
 
     @Value("${node.heartbeat-interval:10}")
@@ -68,12 +64,8 @@ public class NodeHealthCheckService {
             return;
         }
 
-        // 2. 如果数据库状态是隔离，跳过心跳更新，同步 currentNode 后返回
-        if (dbNode.getStatus() == 2) {
-            log.info("节点已隔离，跳过心跳更新: nodeName={}", dbNode.getNodeName());
-            nodeAutoRegisterService.updateCurrentNode(dbNode);  // 同步整个 currentNode
-            return;
-        }
+        // 2. 如果数据库状态是隔离，仍然更新心跳，但不修改状态
+        // 隔离只是人为控制，不代表节点坏了，节点仍然正常运行应该更新心跳
 
         // 3. 检查 currentNode 和数据库状态是否一致
         if (currentNode.getStatus() != null && !currentNode.getStatus().equals(dbNode.getStatus())) {
@@ -100,7 +92,12 @@ public class NodeHealthCheckService {
     }
 
     /**
-     * 全局存活检测（每10秒，分布式锁）
+     * 全局存活检测（每10秒，每个节点独立重建哈希环）
+     * 说明：
+     * 1. 每个节点独立查询 Zookeeper + MySQL 数据源
+     * 2. 每个节点独立判断存活状态并重建哈希环
+     * 3. 所有节点看到的数据源一致，哈希环也会一致
+     * 4. 数据库状态更新虽有重复，但只在状态变更时才执行，性能影响小
      */
     @Scheduled(fixedRateString = "${node.heartbeat-interval:10}000")
     public void globalHealthCheck() {
@@ -110,51 +107,26 @@ public class NodeHealthCheckService {
         }
 
         try {
-            distributedLockService.executeWithLock(HEALTH_CHECK_LOCK, 0, 30, TimeUnit.SECONDS, () -> {
-                doGlobalHealthCheck();
-            });
+            // 1. 获取 Zookeeper 中的在线节点列表
+            List<String> zkOnlineNodes = getZkOnlineNodes();
+            log.debug("Zookeeper在线节点列表: count={}, nodes={}", zkOnlineNodes.size(), zkOnlineNodes);
+
+            // 2. 获取 MySQL 中的所有节点
+            List<StorageNode> allDbNodes = storageNodeMapper.selectList(null);
+            log.debug("MySQL节点列表: count={}", allDbNodes.size());
+
+            // 3. 判断存活状态并重建哈希环
+            List<StorageNode> aliveNodes = determineAliveNodes(allDbNodes, zkOnlineNodes);
+            log.debug("存活节点列表: count={}, nodes={}", aliveNodes.size(), 
+                    aliveNodes.stream().map(StorageNode::getNodeName).collect(Collectors.toList()));
+
+            // 4. 重建一致性哈希环
+            consistentHash.rebuild(aliveNodes);
+            log.info("一致性哈希环已重建: 节点数={}, nodes={}", aliveNodes.size(),  
+                    aliveNodes.stream().map(StorageNode::getNodeName).collect(Collectors.toList()));
         } catch (Exception e) {
             log.error("全局健康检测失败: {}", e.getMessage());
         }
-    }
-
-    /**
-     * 执行全局健康检测
-     */
-    private void doGlobalHealthCheck() {
-        log.info("开始全局健康检测...");
-
-        // 1. 检查上次检测时间
-        String lastCheckTimeStr = redisTemplate.opsForValue().get(LAST_CHECK_TIME_KEY);
-        if (lastCheckTimeStr != null) {
-            LocalDateTime lastCheckTime = LocalDateTime.parse(lastCheckTimeStr, DATE_FORMATTER);
-            if (lastCheckTime.plusSeconds(heartbeatInterval).isAfter(LocalDateTime.now())) {
-                log.info("上次检测在{}秒内，跳过本次检测: lastCheckTime={}", heartbeatInterval, lastCheckTime);
-                return;
-            }
-        }
-
-        // 2. 获取 Zookeeper 中的在线节点列表
-        List<String> zkOnlineNodes = getZkOnlineNodes();
-        log.info("Zookeeper在线节点列表: count={}, nodes={}", zkOnlineNodes.size(), zkOnlineNodes);
-
-        // 3. 获取 MySQL 中的所有节点
-        List<StorageNode> allDbNodes = storageNodeMapper.selectList(null);
-        log.info("MySQL节点列表: count={}", allDbNodes.size());
-
-        // 4. 双重判断存活状态
-        List<StorageNode> aliveNodes = determineAliveNodes(allDbNodes, zkOnlineNodes);
-        log.info("存活节点列表: count={}, nodes={}", aliveNodes.size(), 
-                aliveNodes.stream().map(StorageNode::getNodeName).collect(Collectors.toList()));
-
-        // 5. 更新全局检测时间
-        redisTemplate.opsForValue().set(LAST_CHECK_TIME_KEY, LocalDateTime.now().format(DATE_FORMATTER));
-        log.info("全局检测时间已更新: {}", LocalDateTime.now());
-
-        // 6. 重建一致性哈希环
-        consistentHash.rebuild(aliveNodes);
-        log.info("一致性哈希环已重建: 节点数={}", aliveNodes.size());
-        log.info("全局健康检测完成");
     }
 
     /**
@@ -180,7 +152,7 @@ public class NodeHealthCheckService {
         for (StorageNode node : dbNodes) {
             // 隔离节点不检测，不加入存活列表
             if (node.getStatus() == 2) {
-                log.info("节点已隔离，跳过检测: nodeName={}, status=2", node.getNodeName());
+                log.debug("节点已隔离，跳过存活检测: nodeName={}, status=2", node.getNodeName());
                 continue;
             }
 
@@ -217,10 +189,25 @@ public class NodeHealthCheckService {
     }
 
     /**
+     * 获取状态名称
+     */
+    private String getStatusName(Integer status) {
+        if (status == null) {
+            return "未知";
+        }
+        return switch (status) {
+            case STATUS_OFFLINE -> "离线";
+            case STATUS_ONLINE -> "在线";
+            case STATUS_ISOLATED -> "隔离";
+            default -> "未知";
+        };
+    }
+
+    /**
      * 更新节点状态
      */
     private void updateNodeStatus(StorageNode node, boolean isAlive) {
-        int newStatus = isAlive ? 1 : 0;
+        int newStatus = isAlive ? STATUS_ONLINE : STATUS_OFFLINE;
         Integer currentStatus = node.getStatus();
 
         // 状态变更时更新
@@ -228,8 +215,8 @@ public class NodeHealthCheckService {
             node.setStatus(newStatus);
             node.setLastHeartbeat(LocalDateTime.now());
             storageNodeMapper.updateById(node);
-            log.info("节点状态变更: nodeName={}, oldStatus={}, newStatus={}", 
-                    node.getNodeName(), currentStatus, newStatus == 1 ? "在线" : "离线");
+            log.info("节点状态变更: nodeName={}, oldStatus={}, newStatus={}",
+                    node.getNodeName(), getStatusName(currentStatus), getStatusName(newStatus));
         }
     }
 }

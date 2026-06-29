@@ -11,7 +11,7 @@
               <template #append><el-button @click="loadUsers"><el-icon><Search /></el-icon></el-button></template>
             </el-input>
           </div>
-          <el-button type="primary" @click="showCreateDialog">新建用户</el-button>
+          <el-button v-if="hasPermission('user:create')" type="primary" @click="showCreateDialog">新建用户</el-button>
         </div>
       </template>
 
@@ -36,14 +36,14 @@
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="155" />
-        <el-table-column label="操作" width="290" fixed="right">
-            <template #default="{ row }">
-            <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleToggleStatus(row)" :disabled="row.username === 'admin'">
+        <el-table-column label="操作" width="290" fixed="right" v-if="hasAnyUserManagePermission()">
+          <template #default="{ row }">
+            <el-button v-if="hasPermission('user:edit')" size="small" @click="showEditDialog(row)">编辑</el-button>
+            <el-button v-if="hasPermission('user:edit')" size="small" type="warning" @click="handleToggleStatus(row)" :disabled="row.username === 'admin'">
               {{ row.status === 1 ? '禁用' : '启用' }}
             </el-button>
-            <el-button size="small" type="info" @click="showRoleDialog(row)">分配角色</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)" :disabled="row.username === 'admin'">删除</el-button>
+            <el-button v-if="hasPermission('user:assign-role')" size="small" type="info" @click="showRoleDialog(row)">分配角色</el-button>
+            <el-button v-if="hasPermission('user:delete')" size="small" type="danger" @click="handleDelete(row)" :disabled="row.username === 'admin'">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -111,6 +111,7 @@ const keyword = ref('')
 const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const permissions = ref([])
 
 const dialogVisible = ref(false)
 const roleDialogVisible = ref(false)
@@ -122,10 +123,28 @@ const form = ref({ username: '', password: '', nickname: '', email: '', phone: '
 const selectedRoles = ref([])
 const allRoles = ref([])
 
-onMounted(() => {
+onMounted(async () => {
+  // 获取用户权限
+  try {
+    const res = await request.get('/auth/current')
+    permissions.value = res.data.permissions || []
+  } catch (error) {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    permissions.value = userInfo.permissions || []
+  }
   loadUsers()
   loadRoles()
 })
+
+// 权限检查函数
+const hasPermission = (perm) => {
+  return permissions.value.includes(perm)
+}
+
+// 检查是否有任一用户管理操作权限
+const hasAnyUserManagePermission = () => {
+  return hasPermission('user:edit') || hasPermission('user:assign-role') || hasPermission('user:delete')
+}
 
 const loadUsers = async () => {
   loading.value = true

@@ -44,7 +44,7 @@ public class InternalStorageController {
 
         try {
             localStorageService.store(storagePath, new ByteArrayInputStream(data));
-            log.info("内部存储成功: path={}, size={}", storagePath, data.length);
+            log.debug("内部存储成功: path={}, size={}", storagePath, data.length);
             return Result.success();
         } catch (Exception e) {
             log.error("内部存储失败: path={}", storagePath, e);
@@ -72,7 +72,7 @@ public class InternalStorageController {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             localStorageService.read(storagePath, baos);
             byte[] data = baos.toByteArray();
-            log.info("内部读取成功: path={}, size={}", storagePath, data.length);
+            log.debug("内部读取成功: path={}, size={}", storagePath, data.length);
             return data;
         } catch (Exception e) {
             log.error("内部读取失败: path={}", storagePath, e);
@@ -97,7 +97,7 @@ public class InternalStorageController {
 
         try {
             localStorageService.delete(storagePath);
-            log.info("内部删除成功: path={}", storagePath);
+            log.debug("内部删除成功: path={}", storagePath);
             return Result.success();
         } catch (Exception e) {
             log.error("内部删除失败: path={}", storagePath, e);

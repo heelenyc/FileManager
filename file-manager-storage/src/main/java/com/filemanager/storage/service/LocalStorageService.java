@@ -50,7 +50,7 @@ public class LocalStorageService {
         if (Files.exists(fullPath)) {
             try {
                 Files.delete(fullPath);
-                log.info("文件已删除: {}", fullPath);
+                log.debug("文件已删除: {}", fullPath);
             } catch (IOException e) {
                 log.error("文件删除失败: path={}", fullPath, e);
                 throw new RuntimeException("文件删除失败: " + relativePath, e);

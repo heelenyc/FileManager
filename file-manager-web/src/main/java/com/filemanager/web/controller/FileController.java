@@ -32,6 +32,7 @@ public class FileController {
 
     @Operation(summary = "上传文件（统一走分片逻辑，小文件 chunkCount=1）")
     @PostMapping("/upload")
+    @RequirePermission("file:upload")
     @OperationLog("上传文件")
     public Result<FileVO> upload(@RequestParam("file") MultipartFile file,
                                  @RequestAttribute("userId") Long userId) throws IOException {
@@ -40,6 +41,7 @@ public class FileController {
 
     @Operation(summary = "初始化分片上传")
     @PostMapping("/chunk/init")
+    @RequirePermission("file:upload")
     @OperationLog("初始化分片上传")
     public Result<InitUploadVO> initChunkUpload(@RequestParam String fileName,
                                                  @RequestParam Long fileSize,
@@ -50,6 +52,7 @@ public class FileController {
 
     @Operation(summary = "上传分片")
     @PostMapping("/chunk/upload")
+    @RequirePermission("file:upload")
     @OperationLog("上传分片")
     public Result<Void> uploadChunk(@RequestParam String fileKey,
                                     @RequestParam Integer chunkIndex,
@@ -101,6 +104,7 @@ public class FileController {
 
     @Operation(summary = "获取文件信息")
     @GetMapping("/{fileKey}")
+    @RequirePermission("file:download")
     public Result<FileVO> getInfo(@PathVariable String fileKey) {
         return Result.success(fileService.getFileVO(fileKey));
     }
@@ -117,6 +121,7 @@ public class FileController {
 
     @Operation(summary = "查询分片上传进度（断点续传）")
     @GetMapping("/chunk/progress/{fileKey}")
+    @RequirePermission("file:upload")
     public Result<InitUploadVO> getUploadProgress(@PathVariable String fileKey) {
         InitUploadVO progress = fileService.getUploadProgress(fileKey);
         if (progress == null) {

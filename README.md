@@ -55,9 +55,16 @@
 
 ### 5. 安全特性
 - ✅ JWT Token 认证
+  - AccessToken 过期时间：2小时（可配置）
+  - RefreshToken 过期时间：7天（可配置）
+- ✅ Token 黑名单机制（登出时 Token 立即失效）
+- ✅ Redis 用户信息缓存（过期时间可配置，默认5分钟）
+- ✅ 权限变更实时生效（缓存自动清除）
 - ✅ 文件 AES 加密存储
 - ✅ 接口限流（Bucket4j + Redis）
 - ✅ 操作日志记录
+- ✅ 前端权限控制（菜单、按钮根据权限显示/隐藏）
+- ✅ 后端权限检查完备（所有 API 接口都有 `@RequirePermission` 注解）
 
 ---
 
@@ -384,6 +391,37 @@ Zookeeper在线节点列表: count=2, nodes=[node0, node1]
 分片可用节点: chunkIndex=0, primaryNode=node0, replicaNodes=[node1]
 分片读取成功: chunkIndex=0, node=node1, path=...chunk_0_replica_0
 ```
+
+---
+
+## 安全机制
+
+### Token 黑名单机制
+```
+用户登出 → 提取 Token → SHA-256 Hash → 加入 Redis 黑名单 → Token 立即失效
+```
+
+**特性**：
+- Token Hash 存储到 Redis（key: `token:blacklist:{hash}`)
+- 黑名单过期时间 = Token 剩余有效时间
+- 每次请求检查黑名单（AuthInterceptor）
+- 登出后 Token 无法继续使用
+
+### 权限变更实时生效
+```
+修改用户权限 → 清除 Redis 缓存 → 下次请求重新加载权限 → 权限立即生效
+```
+
+**缓存清除时机**：
+- 分配角色给用户
+- 分配权限给角色
+- 删除角色
+- 删除用户
+- 用户登出
+
+**权限检查机制**：
+- 前端：菜单和按钮根据权限显示/隐藏
+- 后端：所有 API 接口都有 `@RequirePermission` 注解检查
 
 ---
 
